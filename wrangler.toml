@@ -1,17 +1,18 @@
 name = "vpn-generator"
 main = "worker/index.js"
-compatibility_date = "2024-10-10"
-workers_dev = true
+compatibility_date = "2025-12-11"
+usage_model = "unbound"
 
-# Bind KV
+# KV namespace binding
 kv_namespaces = [
   { binding = "KV_PROXY_LIST", id = "9a5f43fba778479cadaf18dcf315a364" }
 ]
 
-
-# Enable Sockets API (untuk TCP/UDP)
-[observability]
-enabled = true
-
+# Untuk service sockets, deploy via wrangler > workers deploy --service (see docs)
+# Jika perlu secret/env:
 [vars]
+RELAY_HOST = "udp-relay.hobihaus.space"
+RELAY_PORT = "7300"
+CONVERTER_URL = "https://api.foolvpn.web.id/convert"
+PRX_HEALTH_CHECK_API = "https://id1.foolvpn.web.id/api/v1/check"
 REVERSE_PRX_TARGET = "example.com"
