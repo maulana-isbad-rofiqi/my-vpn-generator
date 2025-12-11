@@ -849,7 +849,7 @@ async function generateConfig(url) {
   const count = Number(url.searchParams.get("count") || 1);
 
   const address = domain;
-  const host = wildcard ? `${bug}.${domain}` : domain;
+  const host = wildcard ? bug : domain;
   const sni = host;
 
   // Load proxies
@@ -1028,6 +1028,22 @@ function populateISP(list) {
 
 loadRegions();
 
+// Update preview function
+function updatePreview() {
+  const wildcard = document.getElementById("wildcard").value === "1";
+  const bug = document.getElementById("bug").value;
+  const domain = location.hostname;
+  const hostSni = wildcard ? bug : domain;
+  document.getElementById("preview").textContent = "Host/SNI: " + hostSni;
+}
+
+// Event listeners for preview update
+document.getElementById("wildcard").addEventListener("change", updatePreview);
+document.getElementById("bug").addEventListener("change", updatePreview);
+
+// Initial preview
+updatePreview();
+
 // Generate Config
 document.getElementById("generate").addEventListener("click", async () => {
   const url =
@@ -1046,10 +1062,6 @@ document.getElementById("generate").addEventListener("click", async () => {
   const txt = await res.text();
 
   out.textContent = txt || "Tidak ada hasil.";
-
-  document.getElementById("preview").textContent =
-    "Host/SNI: " +
-    document.getElementById("bug").value;
 });
 
 // COPY CONFIG
