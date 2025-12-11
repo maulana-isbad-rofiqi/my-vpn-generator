@@ -1,19 +1,35 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>VPN Generator</title>
-  <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <title>VPN Region Generator</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<h1>Generator VLESS / Trojan</h1>
+<div class="container">
 
-<label>Domain: <input id="domain" placeholder="example.com"></label>
-<label>Limit: <input id="limit" value="5" type="number"></label>
-<button id="generate">Generate</button>
+    <h1 class="title">🌐 VPN Generator Dashboard</h1>
+    <p class="subtitle">Pilih region server dari Nautica lalu generate konfigurasi otomatis.</p>
 
-<pre id="result"></pre>
+    <div class="card">
+        <label class="label">Pilih Region</label>
+        <select id="regionSelect" class="select"></select>
+
+        <button class="btn" onclick="loadRegion()">
+            🚀 Generate Config
+        </button>
+    </div>
+
+    <div class="output-card">
+        <div class="output-header">
+            <span>Hasil Config</span>
+            <button class="copy-btn" onclick="copyResult()">Copy</button>
+        </div>
+        <pre id="result" class="output"></pre>
+    </div>
+
+</div>
 
 <script src="app.js"></script>
 </body>

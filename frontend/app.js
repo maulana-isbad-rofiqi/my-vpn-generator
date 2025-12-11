@@ -1,9 +1,32 @@
-document.getElementById("generate").onclick = async () => {
-  const domain = document.getElementById("domain").value;
-  const limit = document.getElementById("limit").value;
+const regions = [
+  "sg", "sg2", "id", "jp", "us", "my",
+  "uk", "de", "fr", "au", "in"
+];
 
-  const res = await fetch(`/api/sub?domain=${domain}&limit=${limit}`);
-  const text = await res.text();
+window.onload = () => {
+    let select = document.getElementById("regionSelect");
 
-  document.getElementById("result").textContent = text;
+    regions.forEach(r => {
+        let option = document.createElement("option");
+        option.value = r;
+        option.textContent = r.toUpperCase();
+        select.appendChild(option);
+    });
 };
+
+async function loadRegion() {
+    const region = document.getElementById("regionSelect").value;
+
+    document.getElementById("result").textContent = "Loading...";
+
+    const res = await fetch(`/api/region?region=${region}`);
+    const text = await res.text();
+
+    document.getElementById("result").textContent = text;
+}
+
+function copyResult() {
+    const text = document.getElementById("result").textContent;
+    navigator.clipboard.writeText(text);
+    alert("Config berhasil disalin!");
+}
