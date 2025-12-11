@@ -31,6 +31,7 @@ const WS_READY_STATE_CLOSING = 2;
 const CORS_HEADER_OPTIONS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET,HEAD,POST,OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
   "Access-Control-Max-Age": "86400",
 };
 
@@ -131,8 +132,23 @@ export default {
         }
       }
 
-      if (url.pathname.startsWith("/sub")) {
-        return Response.redirect(SUB_PAGE_URL + `?host=${APP_DOMAIN}`, 301);
+      if (url.pathname === "/sub/regions") {
+        const regions = await loadRegions();
+        return new Response(JSON.stringify(regions), {
+          headers: {
+            "Content-Type": "application/json",
+            ...CORS_HEADER_OPTIONS,
+          },
+        });
+      } else if (url.pathname === "/sub" && !url.searchParams.toString()) {
+        return new Response(UI_HTML, {
+          headers: {
+            "Content-Type": "text/html",
+            ...CORS_HEADER_OPTIONS,
+          },
+        });
+      } else if (url.pathname === "/sub") {
+        return generateConfig(url);
       } else if (url.pathname.startsWith("/check")) {
         const target = url.searchParams.get("target").split(":");
         const result = await checkPrxHealth(target[0], target[1] || "443");
@@ -795,6 +811,292 @@ async function checkPrxHealth(prxIP, prxPort) {
   const req = await fetch(`${PRX_HEALTH_CHECK_API}?ip=${prxIP}:${prxPort}`);
   return await req.json();
 }
+
+// ===============================================
+// LOAD REGIONS + ISP LIST
+// ===============================================
+async function loadRegions() {
+  const prxList = await getPrxList();
+
+  const map = {};
+
+  for (const prx of prxList) {
+    const cc = prx.country;
+    if (!cc) continue;
+
+    if (!map[cc]) map[cc] = new Set();
+    if (prx.org) map[cc].add(prx.org.trim());
+  }
+
+  return Object.keys(map)
+    .sort()
+    .map((cc) => ({
+      code: cc,
+      isps: [...map[cc]],
+    }));
+}
+
+// ===============================================
+// CONFIG GENERATOR
+// ===============================================
+async function generateConfig(url) {
+  const domain = url.searchParams.get("domain") || url.hostname;
+  const type = url.searchParams.get("type") || "vless";
+  const wildcard = url.searchParams.get("wildcard") === "1";
+  const bug = url.searchParams.get("bug") || domain;
+  const region = url.searchParams.get("region");
+  const isp = url.searchParams.get("isp");
+  const count = Number(url.searchParams.get("count") || 1);
+
+  const address = domain;
+  const host = wildcard ? `${bug}.${domain}` : domain;
+  const sni = host;
+
+  // Load proxies
+  const prxList = await getPrxList();
+
+  let list = prxList.map((prx) => ({
+    ip: prx.prxIP,
+    port: Number(prx.prxPort),
+    cc: prx.country,
+    org: prx.org,
+  }));
+
+  if (region) list = list.filter((x) => x.cc === region);
+  if (isp)
+    list = list.filter((x) =>
+      (x.org || "").toLowerCase().includes(isp.toLowerCase())
+    );
+
+  // Shuffle
+  shuffleArray(list);
+
+  const uuid = crypto.randomUUID();
+  const output = [];
+
+  for (const p of list.slice(0, count)) {
+    if (type === "vless") {
+      output.push(
+        `vless://${uuid}@${address}:443?security=tls&type=ws&path=/${p.ip}-${p.port}&host=${host}&sni=${sni}#${p.cc}-${encodeURIComponent(
+          p.org
+        )}`
+      );
+    } else {
+      output.push(
+        `trojan://${uuid}@${address}:443?security=tls&type=ws&path=/${p.ip}-${p.port}&host=${host}&sni=${sni}#${p.cc}-${encodeURIComponent(
+          p.org
+        )}`
+      );
+    }
+  }
+
+  return new Response(output.join("\n"), {
+    headers: {
+      "Content-Type": "text/plain",
+      ...CORS_HEADER_OPTIONS,
+    },
+  });
+}
+
+// ===============================================
+// UI HTML PAGE
+// ===============================================
+const UI_HTML = `<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VPN Generator Premium</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+<style>
+body{margin:0;padding:18px;background:#050c14;color:#e6f6ff;font-family:Inter,sans-serif}
+.container{max-width:620px;margin:auto}
+.card{background:#0c1620;padding:16px;border-radius:14px;margin-bottom:18px;border:1px solid #112431}
+h2{margin:0 0 10px 0;font-size:22px;font-weight:700}
+label{display:block;margin-top:12px;font-size:14px;font-weight:600}
+select,input{width:100%;padding:12px;margin-top:6px;border-radius:10px;border:1px solid #132531;background:#09131b;color:#d4f2ff;font-size:14px}
+button{width:100%;padding:14px;margin-top:14px;border:none;border-radius:10px;font-weight:700;cursor:pointer}
+.btn-main{background:linear-gradient(90deg,#00ffc8,#00c4ff);color:#002828}
+.btn-secondary{background:#112631;color:#cdefff}
+.output{background:#000a12;padding:14px;border-radius:12px;height:260px;overflow-y:auto;border:1px solid #10212e;white-space:pre-wrap}
+#qrcanvas{text-align:center;margin-top:16px}
+.footer{text-align:center;margin-top:28px;font-size:13px;color:#89a7b8}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<h2>VPN Generator • Premium UI</h2>
+<div style="color:#7fa5b7;font-size:13px;margin-bottom:12px">Domain: <b id="workerdomain"></b></div>
+
+<div class="card">
+<label>Jumlah Config</label>
+<select id="count"><option>1</option><option>3</option><option>5</option><option>10</option></select>
+
+<label>Jenis</label>
+<select id="type"><option value="vless">VLESS</option><option value="trojan">TROJAN</option></select>
+
+<label>Wildcard</label>
+<select id="wildcard"><option value="0">Tidak</option><option value="1">Ya</option></select>
+
+<label>Region</label>
+<select id="region"></select>
+
+<label>ISP</label>
+<select id="isp"><option value="">(Semua ISP)</option></select>
+
+<label>BUG Host</label>
+<select id="bug">
+  <option>m.udemy.com</option>
+  <option>cdn.cloudflare.com</option>
+  <option>graph.facebook.com</option>
+  <option>m.youtube.com</option>
+  <option>api.cloudflare.com</option>
+</select>
+
+<button id="generate" class="btn-main">Generate</button>
+
+<label>QRIS Payment Link (opsional)</label>
+<input id="paylink" placeholder="https://link-qris">
+
+<button id="copy" class="btn-secondary">Copy All</button>
+<button id="showqr" class="btn-secondary">Tampilkan QR Config</button>
+<button id="showqris" class="btn-secondary">Tampilkan QRIS</button>
+<button id="download" class="btn-secondary">Download .txt</button>
+
+<div id="preview" style="margin-top:12px;font-size:13px;color:#8bb0c1"></div>
+</div>
+
+<div class="card">
+<label>Hasil Config</label>
+<pre id="out" class="output">Belum ada output...</pre>
+<div id="qrcanvas"></div>
+</div>
+
+<div class="footer">UI Premium • Mobile Friendly</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+
+<script>
+// DOMAIN
+document.getElementById("workerdomain").textContent = location.hostname;
+
+// LOAD REGIONS FROM WORKER
+async function loadRegions() {
+  try {
+    const list = await fetch("/sub/regions").then((r) => r.json());
+    const regionSel = document.getElementById("region");
+    regionSel.innerHTML = "";
+
+    list.forEach((r) => {
+      const op = document.createElement("option");
+      op.value = r.code;
+      op.textContent = r.code;
+      regionSel.appendChild(op);
+    });
+
+    regionSel.addEventListener("change", () => populateISP(list));
+    populateISP(list);
+
+  } catch (e) {
+    alert("Gagal memuat region: " + e.message);
+  }
+}
+
+// Populate ISP sesuai region
+function populateISP(list) {
+  const regionSel = document.getElementById("region");
+  const ispSel = document.getElementById("isp");
+
+  const obj = list.find((x) => x.code === regionSel.value);
+
+  ispSel.innerHTML = '<option value="">(Semua ISP)</option>';
+
+  if (obj) {
+    obj.isps.forEach((i) => {
+      const op = document.createElement("option");
+      op.value = i;
+      op.textContent = i;
+      ispSel.appendChild(op);
+    });
+  }
+}
+
+loadRegions();
+
+// Generate Config
+document.getElementById("generate").addEventListener("click", async () => {
+  const url =
+    "/sub?count=" + document.getElementById("count").value +
+    "&type=" + document.getElementById("type").value +
+    "&region=" + encodeURIComponent(document.getElementById("region").value) +
+    "&isp=" + encodeURIComponent(document.getElementById("isp").value) +
+    "&wildcard=" + document.getElementById("wildcard").value +
+    "&bug=" + encodeURIComponent(document.getElementById("bug").value) +
+    "&domain=" + encodeURIComponent(location.hostname);
+
+  const out = document.getElementById("out");
+  out.textContent = "Loading...\n" + url;
+
+  const res = await fetch(url);
+  const txt = await res.text();
+
+  out.textContent = txt || "Tidak ada hasil.";
+
+  document.getElementById("preview").textContent =
+    "Host/SNI: " +
+    document.getElementById("bug").value;
+});
+
+// COPY CONFIG
+document.getElementById("copy").addEventListener("click", () => {
+  navigator.clipboard.writeText(document.getElementById("out").textContent);
+  alert("Disalin!");
+});
+
+// QR CONFIG
+document.getElementById("showqr").addEventListener("click", () => {
+  const raw = document.getElementById("out").textContent.trim();
+  const first = raw.split("\n")[0];
+  if (!first) return alert("Tidak ada config");
+
+  QRCode.toCanvas(first, { width: 240 }).then((canvas) => {
+    const box = document.getElementById("qrcanvas");
+    box.innerHTML = "";
+    box.appendChild(canvas);
+  });
+});
+
+// QRIS
+document.getElementById("showqris").addEventListener("click", () => {
+  const link = document.getElementById("paylink").value.trim();
+  if (!link) return alert("Masukkan link QRIS");
+
+  QRCode.toCanvas(link, { width: 240 }).then((canvas) => {
+    const box = document.getElementById("qrcanvas");
+    box.innerHTML = "";
+    box.appendChild(canvas);
+  });
+});
+
+// DOWNLOAD TXT
+document.getElementById("download").addEventListener("click", () => {
+  const txt = document.getElementById("out").textContent;
+  const blob = new Blob([txt], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "vpn-config.txt";
+  a.click();
+});
+</script>
+
+</body>
+</html>`;
 
 // Helpers
 function base64ToArrayBuffer(base64Str) {
