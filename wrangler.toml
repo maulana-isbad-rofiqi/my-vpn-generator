@@ -1,0 +1,16 @@
+name = "vpn-generator"
+main = "worker/index.js"
+compatibility_date = "2024-10-10"
+workers_dev = true
+
+# Bind KV
+kv_namespaces = [
+  { binding = "KV_PROXY_LIST", id = "kv-proxy-list-id" }
+]
+
+# Enable Sockets API (untuk TCP/UDP)
+[observability]
+enabled = true
+
+[vars]
+REVERSE_PRX_TARGET = "example.com"
