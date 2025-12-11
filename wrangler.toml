@@ -1,4 +1,4 @@
-name = "vpn-generator"
+name = "weathered-river-83f4"
 main = "worker/index.js"
 compatibility_date = "2024-10-01"
 compatibility_flags = ["nodejs_compat", "browser"]
