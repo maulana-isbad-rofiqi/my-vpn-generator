@@ -2,28 +2,28 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>VPN Region Generator</title>
+    <title>VPN Generator Dashboard</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <div class="container">
 
-    <h1 class="title">🌐 VPN Generator Dashboard</h1>
-    <p class="subtitle">Pilih region server dari Nautica lalu generate konfigurasi otomatis.</p>
+    <h1 class="title">🌐 VPN Config Generator</h1>
+    <p class="subtitle">Generate subscription dari endpoint Cloudflare Worker.</p>
 
     <div class="card">
         <label class="label">Pilih Region</label>
         <select id="regionSelect" class="select"></select>
 
-        <button class="btn" onclick="loadRegion()">
-            🚀 Generate Config
+        <button class="btn" onclick="generateSub()">
+            🚀 Generate Subscription
         </button>
     </div>
 
     <div class="output-card">
         <div class="output-header">
-            <span>Hasil Config</span>
+            <span>Subscription Result</span>
             <button class="copy-btn" onclick="copyResult()">Copy</button>
         </div>
         <pre id="result" class="output"></pre>
@@ -32,5 +32,6 @@
 </div>
 
 <script src="app.js"></script>
+
 </body>
 </html>
