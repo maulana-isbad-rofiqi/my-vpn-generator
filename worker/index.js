@@ -1,4 +1,4 @@
-// vpn-generator: Auto proxy from Nautica (MODDED for wildcard vless/trojan)
+// vpn-generator: Auto proxy from Nautica + UI on /sub
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -13,32 +13,49 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
+    // Allow OPTIONS
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 200, headers: CORS });
     }
 
-    if (url.pathname.startsWith("/sub")) {
+    // ============================
+    // 1️⃣ SERVE UI IF /sub WITHOUT PARAMS
+    // ============================
+    if (
+      url.pathname === "/sub" &&
+      !url.searchParams.get("limit") &&
+      !url.searchParams.get("type")
+    ) {
+      return new Response(UI_PAGE, {
+        headers: { "Content-Type": "text/html", ...CORS },
+      });
+    }
+
+    // ============================
+    // 2️⃣ API MODE
+    // ============================
+    if (url.pathname === "/sub") {
       try {
-        // INPUT PARAMETERS
         const limit = Number(url.searchParams.get("limit") || 10);
         const domain = url.searchParams.get("domain") || url.hostname;
-        const type = url.searchParams.get("type") || "vless";    // vless | trojan
-        const wildcard = url.searchParams.get("wildcard") === "1";
-        const bug = url.searchParams.get("bug") || domain;        // BUG DOMAIN
 
-        // BUILD host/sni/address (FIXED)
+        const type = url.searchParams.get("type") || "vless"; // vless/trojan
+        const wildcard = url.searchParams.get("wildcard") === "1";
+        const bug = url.searchParams.get("bug") || domain;
+
+        // address/host/sni logic
         let address = bug;
         let host, sni;
 
         if (wildcard) {
           host = `${bug}.${domain}`;
-          sni  = `${bug}.${domain}`;
+          sni = `${bug}.${domain}`;
         } else {
           host = domain;
-          sni  = domain;
+          sni = domain;
         }
 
-        // Fetch proxy list from Nautica
+        // Fetch proxy list
         const txt = await fetch(NAUTICA_PROXY_URL).then((r) => r.text());
         const lines = txt.split("\n").filter(Boolean);
 
@@ -47,7 +64,7 @@ export default {
           return { ip, port: Number(port), cc, org };
         });
 
-        // Shuffle proxies
+        // shuffle
         for (let i = proxies.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
           [proxies[i], proxies[j]] = [proxies[j], proxies[i]];
@@ -78,38 +95,90 @@ export default {
       }
     }
 
-    return new Response("VPN Generator • Connected", { headers: CORS });
+    // Root
+    return new Response("VPN Generator Connected", { headers: CORS });
   },
 };
 
-// FORMAT CONFIG
+// CONFIG BUILDER
 function buildVLESS(uuid, address, host, sni, px) {
   return (
     `vless://${uuid}@${address}:443` +
-    `?security=tls` +
-    `&sni=${sni}` +
-    `&type=ws` +
-    `&host=${host}` +
+    `?security=tls&type=ws&sni=${sni}&host=${host}` +
     `&path=/${px.ip}-${px.port}` +
-    `#${flag(px.cc)} ${px.org}`
+    `#${px.cc} ${px.org}`
   );
 }
 
 function buildTROJAN(uuid, address, host, sni, px) {
   return (
     `trojan://${uuid}@${address}:443` +
-    `?security=tls` +
-    `&sni=${sni}` +
-    `&type=ws` +
-    `&host=${host}` +
+    `?security=tls&type=ws&sni=${sni}&host=${host}` +
     `&path=/${px.ip}-${px.port}` +
-    `#${flag(px.cc)} ${px.org}`
+    `#${px.cc} ${px.org}`
   );
 }
 
-function flag(cc) {
-  if (!cc || cc.length !== 2) return "";
-  return String.fromCodePoint(
-    ...[...cc.toUpperCase()].map((c) => 127397 + c.charCodeAt(0))
-  );
+// ===============================
+// EMBED UI (langsung di worker)
+// ===============================
+
+const UI_PAGE = `
+<!DOCTYPE html>
+<html>
+<head>
+<title>VPN Generator UI</title>
+<style>
+body { background:#0e0f14; color:white; font-family:Arial; padding:20px; }
+.card { background:#1b1d24; padding:20px; border-radius:12px; max-width:500px; margin:auto; }
+input,select { width:100%; padding:10px; margin-top:10px; border-radius:8px; border:none; }
+button { margin-top:20px; width:100%; padding:12px; border:none; border-radius:8px; background:#00ffc3; font-weight:bold; }
+pre { background:#000; padding:15px; border-radius:10px; margin-top:20px; }
+</style>
+</head>
+<body>
+
+<div class="card">
+<h2>VPN Generator UI</h2>
+
+<label>Jenis Config</label>
+<select id="type">
+<option value="vless">VLESS</option>
+<option value="trojan">TROJAN</option>
+</select>
+
+<label>Wildcard?</label>
+<select id="wildcard">
+<option value="0">Tidak</option>
+<option value="1">Ya</option>
+</select>
+
+<label>Bug Host</label>
+<select id="bug">
+<option>m.udemy.com</option>
+<option>graph.facebook.com</option>
+<option>api.cloudflare.com</option>
+</select>
+
+<button onclick="gen()">Generate</button>
+
+<pre id="out"></pre>
+</div>
+
+<script>
+function gen() {
+  let type = document.getElementById("type").value;
+  let bug = document.getElementById("bug").value;
+  let wildcard = document.getElementById("wildcard").value;
+
+  let url = "/sub?limit=10&domain=vpn-generator.isbadd84.workers.dev&type=" + type + "&bug=" + bug + "&wildcard=" + wildcard;
+
+  fetch(url).then(r=>r.text()).then(t=>{
+    document.getElementById("out").textContent = t;
+  });
 }
+</script>
+
+</body>
+</html>
+`;
