@@ -1,155 +1,278 @@
-// ==============================
-// VPN GENERATOR PREMIUM UI (Mobile Optimized)
-// Compatible with cloudflare:sockets engine
-// ==============================
+const UI_PAGE = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET,HEAD,POST,OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
-};
+<title>VPN Generator Premium</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
 
-const NAUTICA_PROXY_URL =
-  "https://raw.githubusercontent.com/FoolVPN-ID/Nautica/main/proxyList.txt";
-
-export default {
-  async fetch(request, env) {
-    const url = new URL(request.url);
-
-    if (request.method === "OPTIONS") {
-      return new Response(null, { status: 200, headers: CORS });
-    }
-
-    // -----------------------------------
-    // UI PAGE AT /sub
-    // -----------------------------------
-    if (url.pathname === "/sub" && [...url.searchParams.keys()].length === 0) {
-      const regionList = await parseRegionsAndISPs();
-      const html = UI_PAGE.replace("__REGIONS__", JSON.stringify(regionList));
-      return new Response(html, {
-        headers: { "Content-Type": "text/html; charset=utf-8", ...CORS },
-      });
-    }
-
-    // -----------------------------------
-    // API GENERATOR
-    // -----------------------------------
-    if (url.pathname === "/sub") {
-      try {
-        const domain = url.searchParams.get("domain") || url.hostname;
-        const type = (url.searchParams.get("type") || "vless").toLowerCase();
-        const wildcard = url.searchParams.get("wildcard") === "1";
-        const bug = url.searchParams.get("bug") || domain;
-        const region = url.searchParams.get("region") || null;
-        const isp = url.searchParams.get("isp") || null;
-        const count = Number(url.searchParams.get("count") || 1);
-
-        // ADDRESS HARUS DOMAIN WORKER
-        const address = domain;
-
-        const host = wildcard ? bug : domain;
-        const sni = wildcard ? bug : domain;
-
-        // fetch proxy list
-        const txt = await fetch(NAUTICA_PROXY_URL).then((r) => r.text());
-        let proxies = txt
-          .split("\n")
-          .filter(Boolean)
-          .map((r) => {
-            const [ip, port, cc, org] = r.split(",");
-            return { ip, port: Number(port), cc, org };
-          });
-
-        if (region) proxies = proxies.filter((p) => p.cc === region);
-
-        // fuzzy isp filter
-        if (isp) {
-          const ispf = isp.toLowerCase().replace(/[^a-z0-9]/g, "");
-          proxies = proxies.filter((p) => {
-            const org = (p.org || "")
-              .toLowerCase()
-              .replace(/[^a-z0-9]/g, "");
-            return org.includes(ispf);
-          });
-        }
-
-        // shuffle
-        for (let i = proxies.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [proxies[i], proxies[j]] = [proxies[j], proxies[i]];
-        }
-
-        const uuid = crypto.randomUUID();
-        const outputs = [];
-
-        for (const p of proxies.slice(0, count)) {
-          if (type === "vless")
-            outputs.push(buildVLESS(uuid, address, host, sni, p));
-          else outputs.push(buildTROJAN(uuid, address, host, sni, p));
-        }
-
-        return new Response(outputs.join("\n"), {
-          headers: { "Content-Type": "text/plain", ...CORS },
-        });
-      } catch (err) {
-        return new Response("ERR: " + err.message, {
-          status: 500,
-          headers: CORS,
-        });
-      }
-    }
-
-    return new Response("VPN Generator • Connected", { headers: CORS });
-  },
-};
-
-// -----------------------------------
-// BUILDERS
-// -----------------------------------
-
-function buildVLESS(uuid, address, host, sni, px) {
-  return (
-    `vless://${uuid}@${address}:443` +
-    `?security=tls&type=ws` +
-    `&path=/${px.ip}-${px.port}` +
-    `&host=${encodeURIComponent(host)}` +
-    `&sni=${encodeURIComponent(sni)}` +
-    `#${px.cc}%20${encodeURIComponent(px.org)}`
-  );
+<style>
+body {
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  background: #050c14;
+  color: #e5f6ff;
+  padding: 18px;
+  line-height: 1.45;
 }
 
-function buildTROJAN(uuid, address, host, sni, px) {
-  return (
-    `trojan://${uuid}@${address}:443` +
-    `?security=tls&type=ws` +
-    `&path=/${px.ip}-${px.port}` +
-    `&host=${encodeURIComponent(host)}` +
-    `&sni=${encodeURIComponent(sni)}` +
-    `#${px.cc}%20${encodeURIComponent(px.org)}`
-  );
+.container {
+  max-width: 620px;
+  margin: auto;
 }
 
-// -----------------------------------
-// REGIONS + ISP PARSER
-// -----------------------------------
-
-async function parseRegionsAndISPs() {
-  const txt = await fetch(NAUTICA_PROXY_URL).then((r) => r.text());
-  const rows = txt.split("\n").filter(Boolean);
-
-  const map = {};
-
-  for (const r of rows) {
-    const [ip, port, cc, org] = r.split(",");
-    if (!cc) continue;
-    if (!map[cc]) map[cc] = new Set();
-    if (org) map[cc].add(org.trim());
-  }
-
-  return Object.keys(map)
-    .sort()
-    .map((code) => ({
-      code,
-      isps: [...map[code]],
-    }));
+.card {
+  background: #0c1620;
+  padding: 16px;
+  border-radius: 14px;
+  margin-bottom: 18px;
+  border: 1px solid #112431;
 }
+
+h2 {
+  margin-bottom: 6px;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+label {
+  font-size: 14px;
+  font-weight: 600;
+  margin-top: 10px;
+  display: block;
+}
+
+select, input {
+  width: 100%;
+  padding: 12px;
+  margin-top: 6px;
+  background: #09131b;
+  border: 1px solid #132531;
+  border-radius: 10px;
+  color: #d2f1ff;
+  font-size: 14px;
+}
+
+button {
+  width: 100%;
+  padding: 14px;
+  margin-top: 12px;
+  border: none;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.btn-main {
+  background: linear-gradient(90deg, #00ffc8, #00c4ff);
+  color: #002e2e;
+}
+
+.btn-secondary {
+  background: #112631;
+  color: #ccefff;
+}
+
+.output {
+  background: #000a12;
+  padding: 14px;
+  border-radius: 12px;
+  height: 260px;
+  overflow: auto;
+  font-size: 13px;
+  border: 1px solid #10212e;
+}
+
+.qrbox {
+  margin-top: 16px;
+  text-align: center;
+}
+
+.footer {
+  margin-top: 26px;
+  font-size: 13px;
+  color: #88a7b8;
+  text-align: center;
+}
+
+.flag {
+  width: 20px;
+  margin-right: 6px;
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<h2>VPN Generator • Mobile Panel</h2>
+<p style="color:#7fa5b7; font-size:13px; margin-top:0;">
+  Powered by Nautica • <b id="workerdomain"></b>
+</p>
+
+<div class="card">
+  <label>Jumlah Config</label>
+  <select id="count">
+    <option>1</option>
+    <option>3</option>
+    <option>5</option>
+    <option>10</option>
+  </select>
+
+  <label>Jenis Config</label>
+  <select id="type">
+    <option value="vless">VLESS</option>
+    <option value="trojan">TROJAN</option>
+  </select>
+
+  <label>Wildcard</label>
+  <select id="wildcard">
+    <option value="0">Tidak</option>
+    <option value="1">Ya (Host = BUG)</option>
+  </select>
+
+  <label>Region</label>
+  <select id="region"></select>
+
+  <label>ISP</label>
+  <select id="isp"><option value="">(Semua ISP)</option></select>
+
+  <label>BUG Host</label>
+  <select id="bug">
+    <option>m.udemy.com</option>
+    <option>m.youtube.com</option>
+    <option>cdn.cloudflare.com</option>
+    <option>graph.facebook.com</option>
+    <option>api.cloudflare.com</option>
+  </select>
+
+  <button class="btn-main" id="generate">Generate Config</button>
+
+  <label>Payment Link (QRIS)</label>
+  <input id="paylink" placeholder="https://pembayaran..." />
+
+  <button class="btn-secondary" id="copy">Copy All</button>
+  <button class="btn-secondary" id="showqr">Tampilkan QR</button>
+  <button class="btn-secondary" id="showqris">QRIS Bayar</button>
+  <button class="btn-secondary" id="download">Download .txt</button>
+
+  <p id="preview" style="font-size:13px; color:#8bb0c1; margin-top:12px;"></p>
+</div>
+
+<div class="card">
+  <label>Hasil Config</label>
+  <pre id="out" class="output">Belum ada output…</pre>
+
+  <div id="qrcanvas" class="qrbox"></div>
+</div>
+
+<div class="footer">UI Premium • Mobile Optimized</div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+
+<script>
+const REGIONS = __REGIONS__;
+const workerDomain = location.hostname;
+document.getElementById("workerdomain").textContent = workerDomain;
+
+// populate region list
+const regionSelect = document.getElementById("region");
+const ispSelect = document.getElementById("isp");
+
+function flag(cc){
+  return [...cc].map(c=>String.fromCodePoint(127397+c.charCodeAt())).join('');
+}
+
+REGIONS.forEach(r=>{
+  const opt=document.createElement("option");
+  opt.value=r.code;
+  opt.textContent = flag(r.code)+" "+r.code;
+  regionSelect.appendChild(opt);
+});
+
+function loadISPs(){
+  ispSelect.innerHTML = '<option value="">(Semua ISP)</option>';
+  const reg = REGIONS.find(x=>x.code === regionSelect.value);
+  if(reg) reg.isps.forEach(i=>{
+    const op=document.createElement("option");
+    op.value=i;
+    op.textContent=i;
+    ispSelect.appendChild(op);
+  });
+}
+regionSelect.addEventListener("change", loadISPs);
+loadISPs();
+
+// preview updater
+function updatePreview(){
+  const bug = document.getElementById("bug").value;
+  const wildcard = document.getElementById("wildcard").value === "1";
+  const host = wildcard ? bug : workerDomain;
+  const sni  = wildcard ? bug : workerDomain;
+  document.getElementById("preview").textContent =
+    "address="+workerDomain+" • host="+host+" • sni="+sni;
+}
+document.getElementById("bug").addEventListener("change", updatePreview);
+document.getElementById("wildcard").addEventListener("change", updatePreview);
+updatePreview();
+
+// GENERATE
+document.getElementById("generate").addEventListener("click", async ()=>{
+  const url =
+    "/sub?count="+document.getElementById("count").value+
+    "&type="+document.getElementById("type").value+
+    "&region="+encodeURIComponent(regionSelect.value)+
+    "&isp="+encodeURIComponent(ispSelect.value)+
+    "&wildcard="+document.getElementById("wildcard").value+
+    "&bug="+encodeURIComponent(document.getElementById("bug").value)+
+    "&domain="+encodeURIComponent(workerDomain);
+
+  const out = document.getElementById("out");
+  out.textContent = "Loading config...\n"+url;
+
+  const res = await fetch(url);
+  out.textContent = await res.text();
+});
+
+// COPY
+document.getElementById("copy").addEventListener("click",()=>{
+  navigator.clipboard.writeText(document.getElementById("out").textContent);
+  alert("Disalin!");
+});
+
+// QR config
+document.getElementById("showqr").addEventListener("click",()=>{
+  const raw=document.getElementById("out").textContent.trim();
+  const first=raw.split("\\n")[0];
+  QRCode.toCanvas(first,{width:240}).then(c=>{
+    document.getElementById("qrcanvas").innerHTML="";
+    document.getElementById("qrcanvas").appendChild(c);
+  });
+});
+
+// QRIS
+document.getElementById("showqris").addEventListener("click",()=>{
+  const link=document.getElementById("paylink").value.trim();
+  if(!link) return alert("Masukkan Payment Link dulu!");
+  QRCode.toCanvas(link,{width:240}).then(c=>{
+    document.getElementById("qrcanvas").innerHTML="";
+    document.getElementById("qrcanvas").appendChild(c);
+  });
+});
+
+// DOWNLOAD
+document.getElementById("download").addEventListener("click",()=>{
+  const text=document.getElementById("out").textContent;
+  const blob=new Blob([text],{type:"text/plain"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;a.download="vpn-config.txt";a.click();
+});
+</script>
+
+</body>
+</html>`;
