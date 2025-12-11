@@ -1,37 +1,178 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <title>VPN Generator Dashboard</title>
-    <link rel="stylesheet" href="style.css">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VPN Generator Premium</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;padding:18px;background:#050c14;color:#e6f6ff;font-family:Inter, sans-serif}
+.container{max-width:600px;margin:auto}
+.card{background:#0c1620;padding:16px;border-radius:14px;margin-bottom:18px;border:1px solid #112431}
+h2{margin:0 0 8px 0;font-size:22px;font-weight:700}
+label{display:block;margin-top:12px;font-size:14px;font-weight:600}
+select,input{width:100%;padding:12px;margin-top:6px;border-radius:10px;border:1px solid #132531;background:#09131b;color:#d4f2ff;font-size:14px}
+button{width:100%;padding:14px;margin-top:14px;border:none;border-radius:10px;font-weight:700;cursor:pointer}
+.btn-main{background:linear-gradient(90deg,#00ffc8,#00c4ff);color:#002828}
+.btn-secondary{background:#112631;color:#cdefff}
+.output{background:#000a12;padding:14px;border-radius:12px;height:260px;overflow-y:auto;border:1px solid #10212e;white-space:pre-wrap}
+#qrcanvas{margin-top:16px;text-align:center}
+.footer{text-align:center;margin-top:28px;font-size:13px;color:#89a7b8}
+.flag{width:20px;margin-right:6px}
+</style>
 </head>
 <body>
-
 <div class="container">
+<h2>VPN Generator • Premium Mobile</h2>
+<div style="color:#7fa5b7;font-size:13px;margin-bottom:14px">Domain Worker: <b id="workerdomain"></b></div>
 
-    <h1 class="title">🌐 VPN Config Generator</h1>
-    <p class="subtitle">Generate subscription dari endpoint Cloudflare Worker.</p>
+<div class="card">
+<label>Jumlah Config</label>
+<select id="count"><option>1</option><option>3</option><option>5</option><option>10</option></select>
 
-    <div class="card">
-        <label class="label">Pilih Region</label>
-        <select id="regionSelect" class="select"></select>
+<label>Jenis Config</label>
+<select id="type"><option value="vless">VLESS</option><option value="trojan">TROJAN</option></select>
 
-        <button class="btn" onclick="generateSub()">
-            🚀 Generate Subscription
-        </button>
-    </div>
+<label>Wildcard</label>
+<select id="wildcard"><option value="0">Tidak</option><option value="1">Ya</option></select>
 
-    <div class="output-card">
-        <div class="output-header">
-            <span>Subscription Result</span>
-            <button class="copy-btn" onclick="copyResult()">Copy</button>
-        </div>
-        <pre id="result" class="output"></pre>
-    </div>
+<label>Region</label>
+<select id="region"></select>
 
+<label>ISP</label>
+<select id="isp"><option value="">(Semua ISP)</option></select>
+
+<label>BUG Host</label>
+<select id="bug">
+  <option>m.udemy.com</option>
+  <option>cdn.cloudflare.com</option>
+  <option>graph.facebook.com</option>
+  <option>m.youtube.com</option>
+  <option>api.cloudflare.com</option>
+</select>
+
+<button id="generate" class="btn-main">Generate Config</button>
+
+<label>Payment Link (QRIS)</label>
+<input id="paylink" placeholder="https://qris-link">
+
+<button id="copy" class="btn-secondary">Copy All</button>
+<button id="showqr" class="btn-secondary">QR Config</button>
+<button id="showqris" class="btn-secondary">QRIS</button>
+<button id="download" class="btn-secondary">Download .txt</button>
+<div id="preview" style="margin-top:12px;font-size:13px;color:#8bb0c1"></div>
 </div>
 
-<script src="app.js"></script>
+<div class="card">
+<label>Hasil Config</label>
+<pre id="out" class="output">Belum ada output...</pre>
+<div id="qrcanvas"></div>
+</div>
 
+<div class="footer">UI Premium • Fully Mobile</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+<script>
+const REGIONS = []; // placeholder: worker akan inject region JSON via fetch when rendering
+const workerDomain = location.hostname;
+document.getElementById("workerdomain").textContent = workerDomain;
+
+async function loadRegions() {
+  // fetch list from worker API endpoint /sub?meta=regions (we'll use existing /sub to get data)
+  // Because worker returns plain configs on /sub, we instead fetch raw proxyList and parse minimal region list here
+  try {
+    const txt = await fetch('https://raw.githubusercontent.com/FoolVPN-ID/Nautica/main/proxyList.txt').then(r=>r.text());
+    const rows = txt.split('\\n').filter(Boolean);
+    const map = {};
+    rows.forEach(r=>{
+      const parts = r.split(',');
+      const cc = parts[2] || '';
+      const org = parts[3] || '';
+      if(!cc) return;
+      if(!map[cc]) map[cc] = new Set();
+      if(org) map[cc].add(org.trim());
+    });
+    const list = Object.keys(map).sort().map(code=>({code,isps:[...map[code]]}));
+    populateRegions(list);
+  } catch(e){
+    // fallback: minimal
+    populateRegions([{code:'ID', isps:['PT Telekomunikasi Indonesia']}]);
+  }
+}
+
+function populateRegions(list){
+  const regionSel = document.getElementById('region');
+  regionSel.innerHTML = '';
+  list.forEach(r=>{
+    const o = document.createElement('option'); o.value = r.code; o.textContent = r.code; regionSel.appendChild(o);
+  });
+  regionSel.dispatchEvent(new Event('change'));
+  regionSel.addEventListener('change', function(){
+    const code = regionSel.value;
+    const rr = list.find(x=>x.code===code);
+    const ispSel = document.getElementById('isp');
+    ispSel.innerHTML = '<option value="">(Semua ISP)</option>';
+    if(rr && rr.isps) rr.isps.forEach(i=>{ const op=document.createElement('option'); op.value=i; op.textContent=i; ispSel.appendChild(op);});
+  });
+}
+
+loadRegions();
+
+// generate
+document.getElementById('generate').addEventListener('click', async ()=>{
+  const url =
+    '/sub?count=' + encodeURIComponent(document.getElementById('count').value) +
+    '&type=' + encodeURIComponent(document.getElementById('type').value) +
+    '&region=' + encodeURIComponent(document.getElementById('region').value) +
+    '&isp=' + encodeURIComponent(document.getElementById('isp').value) +
+    '&wildcard=' + encodeURIComponent(document.getElementById('wildcard').value) +
+    '&bug=' + encodeURIComponent(document.getElementById('bug').value) +
+    '&domain=' + encodeURIComponent(workerDomain);
+
+  const out = document.getElementById('out');
+  out.textContent = 'Loading...\\n' + url;
+  try {
+    const res = await fetch(url);
+    const txt = await res.text();
+    out.textContent = txt || 'No result';
+  } catch(e) {
+    out.textContent = 'Fetch error: ' + e.message;
+  }
+});
+
+// copy
+document.getElementById('copy').addEventListener('click', ()=> {
+  navigator.clipboard.writeText(document.getElementById('out').textContent).then(()=>alert('Disalin!'),()=>alert('Gagal copy'));
+});
+
+// show qr
+document.getElementById('showqr').addEventListener('click', ()=>{
+  const raw = document.getElementById('out').textContent.trim();
+  const first = raw.split('\\n')[0] || '';
+  if(!first) return alert('Tidak ada config');
+  QRCode.toCanvas(first, { width: 240 }).then(canvas=>{
+    const box = document.getElementById('qrcanvas'); box.innerHTML=''; box.appendChild(canvas);
+  }).catch(e=>alert('QR error: '+e.message));
+});
+
+// qris
+document.getElementById('showqris').addEventListener('click', ()=>{
+  const link = document.getElementById('paylink').value.trim();
+  if(!link) return alert('Masukkan link pembayaran');
+  QRCode.toCanvas(link, { width: 240 }).then(canvas=>{
+    const box = document.getElementById('qrcanvas'); box.innerHTML=''; box.appendChild(canvas);
+  }).catch(e=>alert('QR error: '+e.message));
+});
+
+// download
+document.getElementById('download').addEventListener('click', ()=>{
+  const text = document.getElementById('out').textContent;
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'vpn-config.txt'; a.click(); URL.revokeObjectURL(url);
+});
+</script>
 </body>
 </html>
+
