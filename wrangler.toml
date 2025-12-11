@@ -5,8 +5,9 @@ workers_dev = true
 
 # Bind KV
 kv_namespaces = [
-  { binding = "KV_PROXY_LIST", id = "kv-proxy-list-id" }
+  { binding = "KV_PROXY_LIST", id = "9a5f43fba778479cadaf18dcf315a364" }
 ]
+
 
 # Enable Sockets API (untuk TCP/UDP)
 [observability]
